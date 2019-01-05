@@ -12,7 +12,7 @@ Jordi Boldú Millà
 El fitxer **jboldum_prac2.Rmd** amb el codi font de la pràctica es troba dins de la carpeta **"code"**
 
 ### Data set
-El fitxer **winequality-red.csv"** amb el dataset de la pràctica es troba dins de la carpeta **"csv"**
+El fitxer **winequality-red.csv** amb el dataset de la pràctica es troba dins de la carpeta **"csv"**
 Podeu trobar el dataset original a https://www.kaggle.com/uciml/red-wine-quality-cortez-et-al-2009
 
 ### Documentació/memòria
