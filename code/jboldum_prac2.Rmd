@@ -1,0 +1,568 @@
+---
+title: 'Tipología i cicle de vida de les dades - Pràctica 2: neteja i validació de les dades'
+author: "Jordi Boldú Millà"
+date: '`r format(Sys.Date(),"%e de %B, %Y")`'
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    toc: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(gridExtra)
+library(reshape2)
+library(GGally)
+library(pROC)
+library(corrplot)
+library(caret)
+library(car)
+library(stats)
+```
+
+
+```{r lectura_dades, echo=FALSE}
+# Llegim el fitxer de dades 
+dfInputOriginal <- read.csv("winequality-red.csv", header = TRUE)
+```
+
+# 1. Descripció del dataset
+
+**Font de les dades**
+
+El conjunt de dades a analitzar 
+
+> **Red Wine Quality** \newline 
+Simple and clean practice dataset for regression or classification modelling 
+
+ha estat descarregat del lloc web *Kaggle*
+
+> https://www.kaggle.com/uciml/red-wine-quality-cortez-et-al-2009
+
+La mostra es composa de `r nrow(dfInputOriginal)` files i `r ncol(dfInputOriginal)` columnes
+
+Cliqueu [**aquí**](https://www.kaggle.com/uciml/red-wine-quality-cortez-et-al-2009) per anar a la pàgina d'origen
+
+**Descripció**
+
+Aquest data set recull informació de diferents variants de vi negre del vi portuguès "Vinho Verde".  Per temes de privacitat, només hi ha disponibles variables fisicoquímiques (entrades) i sensorials (la sortida). No hi ha dades sobre altres tipus d'informació com els tipus de raïm, la marca del vi, el preu de venda del vi, etc.
+
+**Llistat d'atributs del data set**
+
+- **fixed acidity**: concentració d'àcid tartàric dins del vi. 
+Es mesura en g/dm<sup>3</sup>
+
+- **volatile acidity**: concentració d'àcid acètic dins del vi. En altes concentracions provoca gust de vinagre. 
+Es mesura en g/dm<sup>3</sup>
+
+- **citric acid**:  concentració  d'àcid cítric. En petites quantitats dona sensació de frescor i gust al vi. 
+Es mesura en g/dm<sup>3</sup>
+
+- **residual sugar**: concentració de sucre remanent després dels processos de fermentació. És estrany trobar vins amb concentracions inferiors a 1 g/l. Els vins amb concentracions de 45 g/l o superiors són considerats dolços. 
+Es mesura en g/dm<sup>3</sup>
+
+- **chlorides**: concentració de sal.
+Es mesura en g/dm<sup>3</sup>
+
+- **free sulfur dioxide**: concentració de diòxid de sofre en forma de gas. Ajuda a prevenir el creixement de microbis i la oxidació del vi.
+Es mesura en mg/dm<sup>3</sup>
+
+- **total sulfur dioxide**: concentració total de diòxid de sofre. En baixes concentracions és gairebé indetectable però en concentracions superiors a 50 ppm, té efectes sobre l'olfacte i el gust del vi.
+Es mesura en mg/dm<sup>3</sup>
+
+- **density**:   densitat de l'aigua en funció del percentatge d'alcohol i el contingut de sucre.
+Es mesura en g/cm<sup>3</sup>
+
+- **pH**: indicador que descriu l'acidesa o basicitat d'un vi en una escala de 0 (molt àcid) a 14 (molt bàsic). La majoria dels vins tenen un pH entre 3 i 4.
+
+- **sulphates**: additiu del vi (sulfat de potassi) que pot contribuir als nivells de diòxid de sofre (recordem que aquest actua com agent anti microbial i anti oxidant).
+Es mesura en g/dm<sup>3</sup>
+
+- **alcohol**: percentatge d'alcohol que conté el vi.
+Es mesura en % en volum
+
+- **quality**:  indicador de qualitat del vi en una escala de 1 (pitjor qualitat) a 10 (millor qualitat)
+
+**Mostra de les 5 primeres files del data set**
+
+```{r}
+head(dfInputOriginal)
+```
+
+
+**Perquè és important i quina pregunta/problema pretén respondre?**
+
+Per mitjà de l'anàlisi i exploració d'aquest conjunt de dades intentarem esbrinar si es pot establir alguna relació entre les propietats fisicoquímiques dels vins analitzats (dades objectives) i la seva qualitat (valoració subjectiva) i determinar-ne la importància de cadascuna d'elles.
+
+Les conclusions de l'anàlisi, més enllà del propòsit didàctic d'aquesta pràctica, podrien servir per ajudar a determinar quines característiques cal potenciar i quins processos de producció es poden optimitzar per a l'elaboració de nous vins, ja siguin de bona qualitat o no. Entenem que aquesta decisió dependria d'altres factors o criteris de decisió empresarial (quin és el target objectiu, percentatge d'ingressos que proporciona cada tipus de vi, etc.) i que s'escapen de l'objectiu d'aquesta pràctica.
+
+```{r echo=FALSE}
+dfInput <- dfInputOriginal
+```
+
+# 2. Integració i selecció de les dades d'interès a analitzar.
+
+Les dades que farem servir en el següent estudi provenen totes del mateix conjunt  donat, és a dir, no hem hagut de realitzar cap integració amb dades externes.
+
+Després de llegir amb deteniment la descripció de cadascún dels atributs del data set sembla que n'hi ha alguns que probablement estiguin relacionats (els relatius a la **acidesa** i els que tenen a veure amb el **diòxid de sofre**). 
+En cas d'existir, aquesta relació s'haurà de veure reflectida per exemple, per l'existència d'un **coeficient de correl.lació** amb un cert grau de significació, ja sigui positiu o negatiu.
+
+Malgrat aquesta observació, a priori, no podem descartar cap dels atributs del conjunt inicial de dades doncs encara no disposem de cap indici que permeti fonamentar l'eliminació de cap d'ells.   
+
+# 3. Neteja de les dades.
+
+## Estadístics bàsics del data set de treball
+
+Abans de tractar el punt referent a la neteja de les dades, a títol introductori, adjuntem un breu resum descriptiu dels estadístics bàsics del nostre data set.
+
+```{r echo=TRUE}
+# noms original de les variables
+names(dfInput)
+
+# Estadístics bàsics  
+summary(dfInput)
+
+# Printem el nom i el tipus de variable
+nom_i_tipus <- sapply(dfInput,class)
+data.frame(Variables=names(nom_i_tipus),Classe=as.vector(nom_i_tipus)) 
+
+```
+**NOTA** : A l'apartat *5* d'aquest document s'adjunten gràfiques relatives a la distribució dels valors dels diferents atributs en format boxplot i histograma
+
+## Tractament dels valors buits, nuls i zeros
+
+Tal i com s'indica en la descripció detallada que acompanya al data set original, les dades **no contenen elements buïts o nuls (NA)**
+
+```{r echo=TRUE}
+sapply(dfInput, function(x) sum(is.na(x)))
+```
+
+En canvi, veiem que hi ha files on l'atribut *citric.acid* **conté zeros** 
+
+```{r echo=TRUE}
+lapply(dfInput, function(x) sum(x==0))
+```
+
+Si ens fixem en la distribució de valors que pot prendre aquest atribut juntament amb la gran quantitat de zeros, podem concloure que **no es tracta de cap error** sinó que són valors perfectament vàlids dins la mostra i, per tant, **no els descartem**
+
+## Identificació i tractament de valors extrems
+
+Segons Jason W. Osborne (*Data Cleaning Basics: Best Practices in Dealing with Extreme Scores. Newborn and Infant Nursing Reviews*) un valor extrem es pot descriure com una observació que es desvia tant d'altres observacions com per despertar sospites que va ser generat per un mecanisme diferent. 
+
+Com a punt de partida, podem considerar que aquelles observacions allunyades 3 o més desviacions estàndard de la mitjana de la mostra són susceptibles de ser valors extrems, tret que la mostra sigui particularment petita.
+
+Aquesta valors extrems són un cas particular dels valors què, convencionalment i de manera generalitzada, es coneixen com a **outliers** i que per definició són aquells valors que estan situats a:
+
+ - una distància superior a 1,5 vegades el rang interquartíl.lic per sobre el 3er quartil
+ - una distància inferior a 1,5 vegades el rang interquartíl.lic per sota del 1er quartil 
+
+Farem servir aquesta darrera definició (configuració per defecte del paràmetre *coef* de la funció *boxplot.stats*) per al càcul dels valors aípics
+
+```{r fig.height=10, echo=TRUE, message=FALSE, results="asis"}
+
+c <- names(dfInput)
+total_outliers <- 0
+for (i in 1:ncol(dfInput))
+{
+	cat("  \n")
+  a <- boxplot.stats(dfInput[, i],)$out
+	cat("**Atribut '",c[i],"'**  \n", sep = '')
+	cat("*Num. outliers : ", length(a), "*  \n", sep = '')
+	cat(sort(a), "  \n")
+	total_outliers <- total_outliers + length(a)
+} 
+```
+
+```{r echo=FALSE, results="asis"}
+cat("  \n")
+cat("**Total outliers : ", total_outliers, "** \n", sep='')
+```
+
+A priori apareixen `r total_outliers` valors susceptibles de ser considerats 'atípics' i distribuïts de forma heterogènia entre els diferents atributs però, donat que no tenim prou coneixement sobre el món dels vins per saber si es tracta d'errors de medició o són valors possibles, optarem per a deixar-los, sense fer-ne cap tractament, tot i que ja podem anticipar que la seva dispersió pot impactar en l'anàlisi de les dades 
+
+Una altra tècnica que sovint s'utlitza per a trobar valors atípics és utilitzant la **distància de Mahalanobis** que per mitja del concepte de similitud, permet  identificar aquelles observacions que *més s'allunyen* (o són menys similars) respecte la resta de valors.
+
+A continuació, a tall d'exemple pràctic, realitzarem les següents operacions
+
+ - Calcularem la **distància de Mahalanobis** per a cadascuna de les files del data set
+ - Calcularem els estadístics bàsics de la **distància de Mahalanobis** i els **outliers**
+ - Visualitzarem gràficament quins elements del conjunts de dades són *menys similars* (aquells que estiguin dispersos i més allunyats)
+ 
+```{r mahalanobis}
+# Distancia de mahalanobis
+
+# Settings del gràfic
+options(repr.plot.width=6, repr.plot.height=4) 
+
+# Càlcul de la distància de Mahalanobis
+md <- mahalanobis(dfInput[, c(1:11)], colMeans(dfInput[, c(1:11)]), cov(dfInput[, c(1:11)]))
+
+# Estadístics bàsics de la distància de Mahalanobis
+summary(md)
+
+# Rang interquartílic
+iqr <- IQR(md)
+iqr
+
+# Llindar 
+max_treshold <- IQR(md)*(1.5) + summary(md)[[5]] # 3er quartil
+max_treshold
+
+# Representació gráfica
+plot(md, pch=1, cex=.2, main="Distància de Mahalanibus", 
+xlab = "Índex del element", ylab="Distància")
+abline(h = max_treshold, col="red")  # add cutoff line
+
+# Nombre d'outliers 
+l <- length(boxplot.stats(md)$out)
+l
+
+dfInput$md <- NULL
+```
+# 4. Anàlisi de les dades.
+
+## Selecció dels grups de dades que es volen analitzar/comparar. Planificació dels anàlisis a aplicar
+
+En principi treballarem amb tots els atributs del conjunt de dades orginals i, per a l'estudi de la **homogeneïtat de la variància** (apartat següent), **discretitzarem** la variable *quality* en una nova variable *classe*, qualitativa, que contindrà 3 valors possibles (*Dolent, Normal o Bo*) relatives a la valoració del vi
+
+## Comprovació de la normalitat i homogeneïtat de la variància
+  
+**NOTA** : A l'apartat *5* d'aquest document s'adjunten gràfiques relatives normalitat i la variància
+
+**Estudi de la normalitat**
+
+Per saber si cadascun dels atributs segueix una distribució normal plantejarem el següent contrast d'hipòtesi per a cadascun dels atributs amb un nivell de significació $\alpha$ del 0.05
+
+ - **H0** : La mostra de tamany n segueix una distribució Normal
+ - **H1** : La mostra de tamany n NO segueix una distribució Normal
+
+Aquest contrast el durem a terme amb el **test de normalitat de Shapiro-Wilk** per a *cadascun dels atributs*. Si el *p-valor* obtingut per a cada atribut és menor al nivell de significació $\alpha$ ( < 0.05),  rebutjarem la hipòtesi nul.la (H0) i afirmarem que la mostra NO segueix una distribució normal  
+
+```{r}
+# Normalitat
+for (i in 1:ncol(dfInput))
+{
+  cat("Atribut '",c[i],"', ", sep = '')
+  pvalor <- shapiro.test(dfInput[, i])[["p.value"]]
+  cat("p-valor '", pvalor,"'\n", sep = '')
+  
+}
+```
+
+Podem observar que els valors de cadascun dels atribut del data set **NO segueixen una distribució Normal**
+
+**Estudi de la homogeneïtat de la variància**
+
+Estudiarem la homogeneïtat de la variància aplicant també un contrast d'hipòtesi amb un nivell de significació $\alpha$ del 0.05. 
+
+Per a fer-ho, tal i com s'indicava en l'enunciat **hem discretitzat** la variable *quality* en una nova variable qualitativa *classe*, qualitativa, que contindrà 3 valors possibles (*Dolent, Normal o Bo*) relatives a la valoració del vi.
+
+Estudiarem la homogeneïtat comparant les variàncies de les mostres de vins agrupats per aquest nou attribut *classe*
+
+ - **H0** : Les variàncies poblacionals són iguals (Homoscedasticitat): 
+ - **H1** : Les variàncies poblacionals són diferents (Heteroscedasticitat) 
+
+Aquest contrast el durem a terme per mitjà del**test de Levene**. 
+
+Si el *p-valor* obtingut és menor que el nivell de significació $\alpha$ ( < 0.05) rebutjarem la hipòtesi nul.la (H0) i afirmarem que les variàncies poblacionals són diferents (Heteroscedasticitat). En cas contrari, no podrem rebutjar la hipòtesi nul.la H0
+
+```{r}
+# Homogeneitat de les variances
+dfInput2 <- dfInput
+dfInput2$classe <- 0
+idx <- which(dfInput2$quality < 5)
+dfInput2$classe[idx] <- "Dolent"
+idx <- which(dfInput2$quality >= 5 & dfInput2$quality <= 6)
+dfInput2$classe[idx] <- "Normal"
+idx <- which(dfInput2$quality >= 7)
+dfInput2$classe[idx] <- "Bo"
+dfInput2$quality <- NULL
+dfInput2$classe <- as.factor(dfInput2$classe) 
+table(dfInput2$classe)
+
+# Apliquem el test de Levene
+leveneTest(dfInput2$alcohol,dfInput2$classe)
+```
+
+Com que el p-valor (0.4785) és més gran que el nivell de signifació $\alpha$ (0.05), no podem rebutjar la hipòtesi nul.la H0 que les variàncies poblacionals són iguals i per tant, podem afirmar que **hi ha homoscedasticitat**
+
+
+## Aplicació de proves estadístiques per comparar els grups de dades. 
+
+Tal i com s'ha comentat, volem analitzar i explorar el conjunt de dades per intentar esbrinar si es pot establir alguna relació entre les propietats fisicoquímiques dels vins analitzats (dades objectives) i la seva qualitat (valoració subjectiva) i determinar-ne la importància de cadascuna d'elles.
+
+Per a dur-ho a terme, realitzarem 3 proves estadístiques
+
+- Buscarem la matriu de correl.lació entre els diferents atributs del data set
+- Mirarem de reduir la cardinalitat del conjunt de dades aplicant un algorisme de PCA
+- Finalment, aplicarem models de regressió lineal per veure  si aquests expliquen o no la qualitat del vi en funció de la resta d'atributs i si el model resulta prou acurat
+
+\newpage
+### Matrius de correl.lació
+
+Presentem de manera gràfica, dues gràfiques on queden representades de manera molt visible, els coeficients de correl.lació, i per tant, la relació directa o inversa entre els diferents atributs del data set
+
+```{r message=FALSE}
+# Opcions pel grafic
+options(repr.plot.width=4, repr.plot.height=3)  
+
+ggcorr(dfInput, geom = "blank", label = TRUE, 
+       hjust = 0.9, layout.exp = 2) +
+  geom_point(size = 8, aes(color = coefficient > 0, 
+                           alpha = abs(coefficient) > 0.35)) +
+  scale_alpha_manual(values = c("TRUE" = 0.25, "FALSE" = 0)) +
+  guides(color = FALSE, alpha = FALSE)
+
+# gràfica matriu correlació
+
+corrplot(cor(dfInput), type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+```
+
+**Observacions**
+
+- La qualitat (**quality**) del vi sembla estar principalment relacionada amb els nivells d'alcohol (**alcohol**), de manera *directa* i amb la concentració d'àcid acètic (**volatile.acidity**), de manera *inversa*.
+
+- El % d'alcohol d'un vi (**alcohol**) està *inversament relacionat* amb la seva densitat (**density**)
+
+- El valor d'el pH (**pH**) està *inversa i significativament* relacionat amb atributs que tenen a veure amb l'acidesa (**citric.acid** i **fixed.acidity**) 
+
+- La densitat (**density**) és la **propietat amb un major nombre de correl.lacions** amb d'altres atributs (*directa o inversament*) : **alcohol**, **residual.sugar**, **citric.acid** i **fixed.acidity**
+
+- Els atributs que mesuren substàncies similars (**total.sulfur.dioxide** i **free.sulfur.dioxide**, per un costat i **citric.acid**, **volatile.acidity** i **fixed.acidity**, per l'altre) estan fortament correl.lacionades (*directa o inversament*), com era d'esperar i ja havíem enunciat.
+
+- Finalment, l'atribut **fixed.acidity** és la que està més fortament correl.lacionada (*directa o inversament*) amb d'altres atributs: **citric.acid**, **density** i **pH**
+
+Com a conclusions de les observacions adjuntes podem intuir que hi ha atributs **que semblen millors candidats** a ser explicats amb mètodes de regressió lineal que no pas la qualitat (**quality**) 
+
+\newpage
+### PCA
+
+**NOTA** : A l'apartat *5* d'aquest document s'adjunten diverses  gràfiques relatives a aquesta secció (aportació de l'explicació de la variància per cada component, acumulats, scatter plots per components, ...)
+
+Després d'analitzar la correl.lació que hi ha entre els diferents atributs, tot i que la seva cardinalitat NO és molt alta, semblafia que NO són necessaris tants atributs per determinar la qualitat del vi. De fet, veiem que l'atribut **quality** només està fortament correl.lacionat amb els atributs **alcohol** i **volatile.acidity**
+
+Farem servir la tècnica del PCA, més que amb l'objectiu de reduir la cardinalitat del conjunt, com a eïna per detectar quins atributs són rellevants.
+
+```{r message=FALSE}
+# Treiem l'atribut 'quality' i realitzem el PCA
+dfInput.pca <- prcomp(dfInput[,1:11], scale. = TRUE)
+
+# Examinem el model ...
+summary(dfInput.pca)
+```
+
+Veiem que l'aportació de cada component per explicar la variància del conjunt de dades és molt baixa i que es necessiten 7 components per explicar el 90% d'aquesta variància
+
+```{r message=FALSE}
+# Aportació de cada atribut del dataset x component (-1 a +1)
+dfInput.pca$rotation
+```
+
+Ara utilitzarem el nostre model obtingut via PCA amb els 7 components per veure si podem establir una regressió lineal entre la qualitat del vi i la resta de components i quina precisió té (paràmetre *R-squared*)
+
+```{r message=FALSE}
+fitPCA <- lm(dfInput$quality ~ dfInput.pca$x[,1:7])
+summary(fitPCA)
+```
+
+**Observacions**
+
+El valor del paràmetre *R-squared* és molt baix cosa que ens indica que la precisió del model **no és bona**. 
+
+\newpage
+### Regressió lineal
+
+Anem a calcular un model de regessió lineal que tingui en compte tots els atributs del data set i que, en principi, hauria de ser el millor model de regressió que podem crear
+
+```{r message=FALSE}
+fit0 <- lm(quality ~ ., data=dfInput)
+summary(fit0)
+```
+
+Observem que la precisió/bondat del model (paràmetre *R-squared*), tenint en compte tots els atributs, **és molt baixa** 
+
+Atenent els codis de significació que acompanyen a cada atribut, crearem un model nou on només apareguin els atributs rellevants, a veure com difereix del model complert
+
+```{r message=FALSE}
+fit1 <- lm(quality ~ volatile.acidity+chlorides+free.sulfur.dioxide+total.sulfur.dioxide+pH+alcohol+sulphates, data=dfInput)
+summary(fit1)
+```
+
+Hem obtingut un model amb pràcticament la mateixa precisió que el total.
+
+```{r message=FALSE}
+# Comparem les bondats dels 2 models 
+summary(fit0)$r.squared
+summary(fit1)$r.squared
+```
+
+Ja per acabar, procedirem a la predicció de la categoria d'un vi amb dades de mostra inventades
+
+```{r message=FALSE}
+
+# Predim la qualitat d'un nou vi inventat
+
+set.seed(123)
+fixed.acidity = sample(dfInput$fixed.acidity,1)
+volatile.acidity = sample(dfInput$volatile.acidity,1)
+citric.acid = sample(dfInput$citric.acid,1)
+residual.sugar = sample(dfInput$residual.sugar,1)
+chlorides = sample(dfInput$chlorides,1)
+free.sulfur.dioxide = sample(dfInput$free.sulfur.dioxide,1)
+total.sulfur.dioxide = sample(dfInput$total.sulfur.dioxide,1)
+density = sample(dfInput$density,1)
+pH = sample(dfInput$pH,1)
+sulphates = sample(dfInput$sulphates,1)
+alcohol = sample(dfInput$alcohol,1)
+
+dadesMostra <- data.frame(fixed.acidity, volatile.acidity,citric.acid, residual.sugar,chlorides,free.sulfur.dioxide,total.sulfur.dioxide,density,pH,sulphates, alcohol)
+
+str(dadesMostra)
+
+predict(fit0, dadesMostra) 
+```
+\newpage
+# 5. Representació dels resultats a partir de taules i gràfiques.
+
+## Boxplot de cada atribut
+
+```{r fig.height=8, echo=FALSE, message=FALSE}
+dfInput_melt <- melt(dfInput)
+
+ggplot(dfInput_melt, aes(x=variable, y=value, fill=variable)) +
+geom_boxplot() + facet_wrap(~variable, scales="free", ncol=3) + 
+theme(legend.position="none")
+```
+
+\newpage
+## Histogrames de cada atribut
+
+```{r fig.height=8, echo=FALSE, message=FALSE}
+dfInput_melt <- melt(dfInput)
+
+ggplot(dfInput_melt, aes(value, fill=variable)) + facet_wrap(~variable, scales = 'free', ncol=3) +  geom_histogram() + theme(legend.position="none")
+```
+
+\newpage
+## Alcohol vs Qualitat
+
+```{r fig.height=8, echo=FALSE, message=FALSE}
+options(repr.plot.width=6, repr.plot.height=4)  #Setting the plot size
+ggplot(aes(x= factor(quality), y= alcohol), data = dfInput) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot( alpha = .5,color = 'blue')+
+  stat_summary(fun.y = "mean", geom = "point", color = "darkblue", 
+               shape = 4, size = 4) +
+  labs(x= 'Qualitat (valors entre 3 i 9)',
+       y= 'Alcohol (% en volume)',
+       title= 'Alcohol Vs. Qualitat')
+```
+
+\newpage
+## Volatile acidity vs Qualitat
+
+```{r fig.height=8, echo=FALSE, message=FALSE}
+options(repr.plot.width=6, repr.plot.height=4)  #Setting the plot size
+ggplot(aes(x= factor(quality), y= volatile.acidity), data = dfInput) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot( alpha = .5,color = 'blue')+
+  stat_summary(fun.y = "mean", geom = "point", color = "darkblue", 
+               shape = 4, size = 4) +
+   labs(x= 'Qualitat (valors entre 3 i 9)',
+       y= 'Volatile acidity',
+       title= 'Volatile acidity Vs. Qualitat')
+```
+
+\newpage
+## Normalitat : gràfics Q-Q (normalitat) de cada atribut
+
+```{r fig.height=8, echo=FALSE, message=FALSE}
+plist <- list()
+c <- names(dfInput)
+for (i in 1:ncol(dfInput))
+{
+ 
+  plist[[i]] <- ggplot(dfInput, aes_string(sample = c[i])) +
+                stat_qq() + 
+                stat_qq_line() +
+                labs(title = "Gràfic Q-Q", subtitle = c[i]) +
+                labs(x = "Teòrics", y = "Mostra")
+ 
+}
+
+do.call("grid.arrange", c(plist, ncol=2))
+```
+
+\newpage
+## Variància : gràfic comparant la variància segons la classe de vi
+
+```{r echo=FALSE}
+dfInput2 %>% ggplot(aes(reorder(classe, alcohol,min, order=TRUE), alcohol, fill=classe), data = .) + geom_boxplot() +
+labs(title="Gràfica Alcohol (asc) agrupant per Classe ", x ="Classe", y = "Alcohol")
+```
+
+\newpage
+## PCA : gràfic que mostra la relació entre els diferents components
+
+```{r echo=FALSE}
+options(repr.plot.width=8, repr.plot.height=6) 
+pairs(dfInput.pca$x[,1:7], col = factor(dfInput$quality))
+```
+
+## PCA : gràfic que mostra el % (parcial i acumulat) de la variància segons component
+```{r echo=FALSE}
+# variance
+pr_var =
+  ( dfInput.pca$sdev )^2 
+
+# % of variance
+prop_varex = pr_var / sum( pr_var )
+
+# Plot
+plot( prop_varex, xlab = "Components principals", 
+                  ylab = "% de variància explicada", type = "b" )
+
+# Scree Plot
+plot( cumsum( prop_varex ), xlab = "Components principals", 
+                            ylab = "% de variància acumulada explicada", type = "b" )
+```
+
+\newpage
+# 6. Resolució del problema. 
+
+## A partir dels resultats obtinguts, quines són les conclusions? Els resultats permeten respondre al problema?
+
+Després de la realització de l'anàlisi i a la vista dels resultats clarament podem concloure que:
+
+- la *regressió lineal* NO és un bon model que expliqui la qualitat d'un vi en funció dels atributs existents. Segurament, això és degut, en part, a que estem intentant predir *criteris subjectius* (**quality**) a partir de *valors objectius* (propietats mesurables d'un vi). En aquest cas, potser funcionaria millor *discretitzar* la qualitat del vi en 2 possibles valors binaris (bo=1, dolent=0) i aplicar un model de *regressió logística* 
+
+- Per altra banda, el model de regressió lineal probablement serviria per explicar, amb un cert grau de bondat, altres atributs, sense tenir en compte la qualitat.
+
+\newpage
+# Bibliografia i referències
+
+- Materials de l'assignatura 'Tipología i cicle de vida de les dades', UOC
+- Dataset de mostra : https://www.kaggle.com/uciml/red-wine-quality-cortez-et-al-2009
+- https://stackoverflow.com/questions/49044753/scale-kable-table-to-fit-page-width
+- https://www.rstudio.com/wp-content/uploads/2015/02/rmarkdown-cheatsheet.pdf
+- https://owi.usgs.gov/blog/boxplots/
+- http://r-statistics.co/Top50-Ggplot2-Visualizations-MasterList-R-Code.html#Box%20Plot
+- https://www.cyclismo.org/tutorial/R/pValues.html
+- http://www.sthda.com
+- http://r-statistics.co/Outlier-Treatment-With-R.html
+- https://www.kaggle.com/tsilveira/wine-r/comments
+- https://owi.usgs.gov/blog/boxplots/
+- https://stackoverflow.com/questions/7196450/create-a-data-frame-of-unequal-lengths
+- https://stackoverflow.com/questions/34004008/transposing-in-dplyr
+- https://briatte.github.io/ggcorr/#controlling-the-main-geometry
+- https://rpubs.com/Joaquin_AR/287787
+- https://towardsdatascience.com
+
